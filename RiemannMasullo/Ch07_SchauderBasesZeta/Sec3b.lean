@@ -341,6 +341,193 @@ theorem sLocalAbsolutePW_localFourierSupport {S₀ : Finset (HeightOneSpectrum (
 
 end AbsoluteLevels
 
+/-- A dilate of a compactly supported function by a self-homeomorphism is compactly supported,
+and its support stays in a set whose preimage under the homeomorphism it contains. -/
+private theorem sLocalAbsolutePW_translate_support {G : Type*} [TopologicalSpace G]
+    (e : G ≃ₜ G) (b : ℂ) (φ ψ : G → ℂ) (hψ : ∀ x, ψ x = b * φ (e x)) (s : Set G)
+    (hs : e ⁻¹' s ⊆ s) (hc : HasCompactSupport φ) (hφ : tsupport φ ⊆ s) :
+    HasCompactSupport ψ ∧ tsupport ψ ⊆ s := by
+  have hsub : tsupport ψ ⊆ e ⁻¹' tsupport φ := by
+    refine closure_minimal (fun x hx ↦ ?_) ((isClosed_tsupport φ).preimage e.continuous)
+    refine subset_tsupport φ ?_
+    intro h0
+    exact hx ((hψ x).trans (by rw [h0, mul_zero]))
+  have hcomp : IsCompact (e ⁻¹' tsupport φ) := e.isCompact_preimage.mpr hc
+  exact ⟨hcomp.of_isClosed_subset (isClosed_tsupport ψ) hsub,
+    hsub.trans ((Set.preimage_mono hφ).trans hs)⟩
+
+/-- The S-adelic Fourier transform of a unit translate is a nonnegative multiple of the
+dilate of the Fourier transform by the same unit. -/
+private theorem sLocalAbsolutePW_translate_fourier {F : Type*} [Field F] [NumberField F]
+    {T : Finset (HeightOneSpectrum (𝓞 F))} (u : (SAdeleRing F T)ˣ) :
+    ∃ b : ℝ≥0, ∀ (f : SchwartzBruhat (Multiplicative (SAdeleRing F T))) (y : SAdeleRing F T),
+      sAdeleSchwartzFourier (schwartzBruhatUnitTranslate u f) (Multiplicative.ofAdd y) =
+        ((b : ℝ) : ℂ) * sAdeleSchwartzFourier f (Multiplicative.ofAdd ((u : SAdeleRing F T) * y)) := by
+  let A := SAdeleRing F T
+  let G := Multiplicative A
+  let (w : InfinitePlace F) : MeasurableSpace w.Completion := borel _
+  let (v : HeightOneSpectrum (𝓞 F)) : MeasurableSpace (v.adicCompletion F) := borel _
+  let : MeasurableSpace (InfiniteAdeleRing F) :=
+    inferInstanceAs (MeasurableSpace ((w : InfinitePlace F) → w.Completion))
+  let : MeasurableSpace A :=
+    inferInstanceAs (MeasurableSpace (InfiniteAdeleRing F × ((v : T) → v.val.adicCompletion F)))
+  let μ : MeasureTheory.Measure G := sAdditiveTamagawaMeasure F T
+  obtain ⟨hT₂, hLC, hBor, hHaar, hReg⟩ := sAdele_fourierMeasure (F := F) (S := T)
+  let : T2Space G := hT₂
+  let : LocallyCompactSpace G := hLC
+  let : BorelSpace G := hBor
+  let : μ.IsHaarMeasure := hHaar
+  let : μ.Regular := hReg
+  let d : G ≃ₜ* G :=
+    { toFun := fun x ↦ Multiplicative.ofAdd ((↑u⁻¹ : A) * x.toAdd)
+      invFun := fun x ↦ Multiplicative.ofAdd ((u : A) * x.toAdd)
+      left_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
+      right_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
+      map_mul' := fun x y ↦ Multiplicative.ext (mul_add _ _ _)
+      continuous_toFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd)
+      continuous_invFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd) }
+  let ν := μ.map d
+  let : ν.IsHaarMeasure := d.isHaarMeasure_map μ
+  let : ν.Regular := MeasureTheory.Measure.Regular.map d.toHomeomorph
+  refine ⟨ν.haarScalarFactor μ, fun f y ↦ ?_⟩
+  let k : G → ℂ := fun x ↦
+    f x * star ((sAdeleStandardCharacter F T (x.toAdd * ((u : A) * y)) : Circle) : ℂ)
+  have h1 : (∫ x : G, k (d.toHomeomorph.toMeasurableEquiv x) ∂μ) =
+      ((ν.haarScalarFactor μ : ℝ) : ℂ) * ∫ x : G, k x ∂μ := by
+    rw [← MeasureTheory.integral_map_equiv d.toHomeomorph.toMeasurableEquiv k]
+    change (∫ x : G, k x ∂ν) = _
+    calc
+      _ = ∫ x : G, k x ∂(ν.haarScalarFactor μ • μ) :=
+        congrArg (fun m : MeasureTheory.Measure G ↦ ∫ x : G, k x ∂m)
+          (MeasureTheory.Measure.isMulLeftInvariant_eq_smul_of_regular ν μ)
+      _ = _ := by
+        rw [MeasureTheory.integral_smul_nnreal_measure]
+        rfl
+  refine Eq.trans ?_ h1
+  change (∫ x : A, f (Multiplicative.ofAdd ((↑u⁻¹ : A) * x)) *
+    star ((sAdeleStandardCharacter F T (x * y) : Circle) : ℂ) ∂(sAdditiveTamagawaMeasure F T)) =
+    ∫ x : A, f (Multiplicative.ofAdd ((↑u⁻¹ : A) * x)) *
+      star ((sAdeleStandardCharacter F T (((↑u⁻¹ : A) * x) * ((u : A) * y)) : Circle) : ℂ)
+      ∂(sAdditiveTamagawaMeasure F T)
+  refine MeasureTheory.integral_congr_ae (Filter.Eventually.of_forall fun x ↦ ?_)
+  change _ * star ((sAdeleStandardCharacter F T (x * y) : Circle) : ℂ) =
+    _ * star ((sAdeleStandardCharacter F T (((↑u⁻¹ : A) * x) * ((u : A) * y)) : Circle) : ℂ)
+  rw [mul_mul_mul_comm, Units.inv_mul, one_mul]
+
+/-- A level built from a Fourier region that is stable under shrinking by ideles of absolute
+value at least one at the infinite places and one at the finite places is preserved by the
+classes of norm at least one. The norm-one part of a class acts by a scalar, and the remaining
+part is represented by a positive real at one infinite place. -/
+private theorem sLocalAbsolutePW_translate_level (hST : S ⊆ T) (K : Set (SAdeleRing F S))
+    (hK : ∀ a : (SAdeleRing F S)ˣ, (∀ w : InfinitePlace F, 1 ≤ ‖a.val.1 w‖) →
+      (∀ v : S, ‖a.val.2 v‖ = 1) → ∀ y : SAdeleRing F S, a.val * y ∈ K → y ∈ K)
+    (D : Submodule ℂ (B(T))) (hD : D = ⊤ ∨ D = Z₀(T))
+    (ω : PontryaginDual J₁(T)) (g : J(T)) (hg : large(g))
+    (x : Θ(T, ω)) (hx : x ∈ level(hST, K, D, ω)) :
+    A(T, ω) g x ∈ level(hST, K, D, ω) := by
+  classical
+  let ρ := A(T, ω)
+  have hρ : ∀ (a : (SAdeleRing F T)ˣ) (f : B(T)),
+      ρ (QuotientGroup.mk a) (q(T, ω) f) = q(T, ω) (schwartzBruhatUnitTranslate a f) :=
+    (existsUnique_sLocalHomogeneousThetaAction (F := F) (S := T) ω).exists.choose_spec.2
+  refine map_mem_closure (ρ g).continuous hx ?_
+  rintro _ ⟨f, ⟨hf, hfD⟩, rfl⟩
+  obtain ⟨h, rfl, hband⟩ := (mem_sLocalPWTests hST K f).mp hf
+  obtain ⟨w⟩ := (inferInstance : Nonempty (InfinitePlace F))
+  let t : ℝ≥0ˣ := m(T) g
+  let x₀ := (infinitePlaceRealPower F w (w.mult : ℝ)⁻¹ t).val
+  have hx₀ : 1 ≤ ‖x₀‖ := by
+    have hiso : ‖InfinitePlace.Completion.extensionEmbedding w x₀‖ = ‖x₀‖ :=
+      (InfinitePlace.Completion.isometry_extensionEmbedding w).norm_map_of_map_zero
+        (map_zero _) x₀
+    rw [← hiso, infinitePlaceRealPower_apply, Complex.norm_real, Real.norm_eq_abs]
+    exact (Real.one_le_rpow hg (inv_nonneg.mpr (Nat.cast_nonneg _))).trans (le_abs_self _)
+  have hsS : ∃ uS : (integralAdelesOutside F S)ˣ,
+      integralIdeleInsertion F S uS = singlePlaceIdeleNormSection F w t := by
+    refine (mem_range_integralIdeleInsertion F S _).mpr fun v _ ↦ ⟨?_, ?_⟩
+    · exact (v.adicCompletionIntegers F).one_mem
+    · change ((singlePlaceIdeleNormSection F w t)⁻¹).val.2 v ∈ _
+      rw [← map_inv]
+      exact (v.adicCompletionIntegers F).one_mem
+  obtain ⟨uS, huS⟩ := hsS
+  let gS := Units.map (adeleProjection F S).toMonoidHom (integralIdeleInsertion F S uS)
+  let gT := Units.map (adeleProjection F T).toMonoidHom (integralIdeleInsertion F S uS)
+  have htr : Π(hST) (schwartzBruhatUnitTranslate gS h) =
+      schwartzBruhatUnitTranslate gT (Π(hST) h) := testTransition_translate_eq hST uS h
+  have hnorm : m(T) (QuotientGroup.mk gT) = t := by
+    obtain ⟨uT, huT⟩ := insert_mem_larger hST uS
+    have hspec := (sIdeleNorm_spec F T).1 uT
+    have hgT : gT = Units.map ((adeleProjection F T).comp
+        (integralAdelesOutside F T).subtype).toMonoidHom uT := by
+      change Units.map (adeleProjection F T).toMonoidHom (integralIdeleInsertion F S uS) = _
+      rw [← huT]
+      rfl
+    change sIdeleNorm F T gT = t
+    rw [hgT, ← hspec]
+    change ideleNorm F (integralIdeleInsertion F T uT) = t
+    rw [huT, huS]
+    exact singlePlaceIdeleNormSection_rightInverse F w t
+  let g₀ : J(T) := g * (QuotientGroup.mk gT)⁻¹
+  have hg₀ : g₀ ∈ (m(T)).ker := MonoidHom.mem_ker.mpr (by
+    change m(T) (g * (QuotientGroup.mk gT)⁻¹) = 1
+    rw [map_mul, map_inv, hnorm]
+    exact mul_inv_cancel t)
+  obtain ⟨v, hv⟩ := QuotientGroup.mk_surjective g₀
+  have hgv : g = QuotientGroup.mk v * QuotientGroup.mk gT := by
+    rw [hv]
+    exact (inv_mul_cancel_right g _).symm
+  let c : ℂ := (ω ⟨g₀, hg₀⟩ : ℂ)
+  have hscal := sLocalHomogeneousTheta_unitTranslate ω ⟨g₀, hg₀⟩ v hv
+    (schwartzBruhatUnitTranslate gT (Π(hST) h))
+  have hq : q(T, ω) (schwartzBruhatUnitTranslate v (schwartzBruhatUnitTranslate gT (Π(hST) h))) =
+      c • q(T, ω) (schwartzBruhatUnitTranslate gT (Π(hST) h)) := by
+    rw [← map_smul]
+    refine (Submodule.Quotient.eq _).mpr (LinearMap.mem_ker.mpr ?_)
+    rw [map_sub, map_smul, hscal, sub_self]
+  have key : ρ g (q(T, ω) (Π(hST) h)) =
+      c • q(T, ω) (Π(hST) (schwartzBruhatUnitTranslate gS h)) := by
+    rw [hgv, map_mul]
+    change ρ (QuotientGroup.mk v) (ρ (QuotientGroup.mk gT) (q(T, ω) (Π(hST) h))) = _
+    rw [hρ, hρ, hq, htr]
+  change ρ g (q(T, ω) (Π(hST) h)) ∈ ((sLocalPWTests hST K ⊓ D).map (q(T, ω)))
+  rw [key]
+  refine Submodule.smul_mem _ _ (Submodule.mem_map_of_mem
+    ⟨(mem_sLocalPWTests hST K _).mpr ⟨_, rfl, ?_⟩, ?_⟩)
+  · obtain ⟨b, hb⟩ := sLocalAbsolutePW_translate_fourier gS
+    let e : Multiplicative (SAdeleRing F S) ≃ₜ Multiplicative (SAdeleRing F S) :=
+      { toFun := fun y ↦ Multiplicative.ofAdd ((gS : SAdeleRing F S) * y.toAdd)
+        invFun := fun y ↦ Multiplicative.ofAdd ((↑gS⁻¹ : SAdeleRing F S) * y.toAdd)
+        left_inv := fun y ↦ Multiplicative.ext (by simp [← mul_assoc])
+        right_inv := fun y ↦ Multiplicative.ext (by simp [← mul_assoc])
+        continuous_toFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd)
+        continuous_invFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd) }
+    refine sLocalAbsolutePW_translate_support e ((b : ℝ) : ℂ) (sAdeleSchwartzFourier h).val
+      (sAdeleSchwartzFourier (schwartzBruhatUnitTranslate gS h)).val (fun y ↦ hb h y.toAdd)
+      (Multiplicative.toAdd ⁻¹' K) ?_ hband.1 hband.2
+    intro y hy
+    refine hK gS (fun w' ↦ ?_) (fun v' ↦ ?_) y.toAdd hy
+    · have h1 : (gS : SAdeleRing F S).1 w' = Pi.mulSingle w x₀ w' :=
+        congrArg (fun z : IdeleGroup (𝓞 F) F ↦ z.val.1 w') huS
+      rw [h1]
+      by_cases hw : w' = w
+      · subst hw
+        rw [Pi.mulSingle_eq_same]
+        exact hx₀
+      · rw [Pi.mulSingle_eq_of_ne hw, norm_one]
+    · have h2 : (gS : SAdeleRing F S).2 v' = 1 :=
+        congrArg (fun z : IdeleGroup (𝓞 F) F ↦ z.val.2 v'.val) huS
+      rw [h2, norm_one]
+  · rcases hD with rfl | rfl
+    · trivial
+    · rw [htr]
+      obtain ⟨h0, h1⟩ := (mem_sAdelePolarSubspace _).mp hfD
+      obtain ⟨b, hb⟩ := sLocalAbsolutePW_translate_fourier gT
+      refine (mem_sAdelePolarSubspace _).mpr ⟨?_, ?_⟩
+      · refine (schwartzBruhatUnitTranslate_apply gT _ 0).trans ?_
+        rw [mul_zero]
+        exact h0
+      · rw [hb, mul_zero, h1, mul_zero]
+
 /-- Paper: Proposition 7.3.2.2(4), p. 352.
 Left translation by an idele class of norm at least one preserves the absolute levels,
 with or without the zero-moment constraint.
@@ -350,7 +537,16 @@ theorem sLocalAbsolutePW_translate (hST : S ⊆ T) {X : ℝ} (_hX : 0 < X)
     (D : Submodule ℂ (B(T))) (_hD : D = ⊤ ∨ D = Z₀(T))
     (ω : PontryaginDual J₁(T)) (g : J(T)) (_hg : large(g))
     (x : Θ(T, ω)) (_hx : x ∈ sLocalAbsolutePW hST X D ω) :
-    A(T, ω) g x ∈ sLocalAbsolutePW hST X D ω := by sorry
+    A(T, ω) g x ∈ sLocalAbsolutePW hST X D ω := by
+  refine sLocalAbsolutePW_translate_level hST (sLocalPWBox S X) ?_ D _hD ω g _hg x _hx
+  intro a ha1 ha2 y hy
+  refine ⟨fun w ↦ le_trans ?_ (hy.1 w), fun v ↦ le_trans ?_ (hy.2 v)⟩
+  · refine pow_le_pow_left₀ (norm_nonneg _) ?_ _
+    change ‖y.1 w‖ ≤ ‖a.val.1 w * y.1 w‖
+    rw [norm_mul]
+    exact le_mul_of_one_le_left (norm_nonneg _) (ha1 w)
+  · change ‖y.2 v‖ ≤ ‖a.val.2 v * y.2 v‖
+    rw [norm_mul, ha2 v, one_mul]
 
 /-- Paper: Definition 7.3.2.3(1), p. 354–355.
 The invariant Fourier region bounds the product of the normalized local absolute values,
@@ -455,6 +651,193 @@ theorem sLocalInvariantPW_globalSupport {S₀ : Finset (HeightOneSpectrum (𝓞 
 
 end InvariantLevels
 
+/-- A dilate of a compactly supported function by a self-homeomorphism is compactly supported,
+and its support stays in a set whose preimage under the homeomorphism it contains. -/
+private theorem sLocalInvariantPW_translate_support {G : Type*} [TopologicalSpace G]
+    (e : G ≃ₜ G) (b : ℂ) (φ ψ : G → ℂ) (hψ : ∀ x, ψ x = b * φ (e x)) (s : Set G)
+    (hs : e ⁻¹' s ⊆ s) (hc : HasCompactSupport φ) (hφ : tsupport φ ⊆ s) :
+    HasCompactSupport ψ ∧ tsupport ψ ⊆ s := by
+  have hsub : tsupport ψ ⊆ e ⁻¹' tsupport φ := by
+    refine closure_minimal (fun x hx ↦ ?_) ((isClosed_tsupport φ).preimage e.continuous)
+    refine subset_tsupport φ ?_
+    intro h0
+    exact hx ((hψ x).trans (by rw [h0, mul_zero]))
+  have hcomp : IsCompact (e ⁻¹' tsupport φ) := e.isCompact_preimage.mpr hc
+  exact ⟨hcomp.of_isClosed_subset (isClosed_tsupport ψ) hsub,
+    hsub.trans ((Set.preimage_mono hφ).trans hs)⟩
+
+/-- The S-adelic Fourier transform of a unit translate is a nonnegative multiple of the
+dilate of the Fourier transform by the same unit. -/
+private theorem sLocalInvariantPW_translate_fourier {F : Type*} [Field F] [NumberField F]
+    {T : Finset (HeightOneSpectrum (𝓞 F))} (u : (SAdeleRing F T)ˣ) :
+    ∃ b : ℝ≥0, ∀ (f : SchwartzBruhat (Multiplicative (SAdeleRing F T))) (y : SAdeleRing F T),
+      sAdeleSchwartzFourier (schwartzBruhatUnitTranslate u f) (Multiplicative.ofAdd y) =
+        ((b : ℝ) : ℂ) * sAdeleSchwartzFourier f (Multiplicative.ofAdd ((u : SAdeleRing F T) * y)) := by
+  let A := SAdeleRing F T
+  let G := Multiplicative A
+  let (w : InfinitePlace F) : MeasurableSpace w.Completion := borel _
+  let (v : HeightOneSpectrum (𝓞 F)) : MeasurableSpace (v.adicCompletion F) := borel _
+  let : MeasurableSpace (InfiniteAdeleRing F) :=
+    inferInstanceAs (MeasurableSpace ((w : InfinitePlace F) → w.Completion))
+  let : MeasurableSpace A :=
+    inferInstanceAs (MeasurableSpace (InfiniteAdeleRing F × ((v : T) → v.val.adicCompletion F)))
+  let μ : MeasureTheory.Measure G := sAdditiveTamagawaMeasure F T
+  obtain ⟨hT₂, hLC, hBor, hHaar, hReg⟩ := sAdele_fourierMeasure (F := F) (S := T)
+  let : T2Space G := hT₂
+  let : LocallyCompactSpace G := hLC
+  let : BorelSpace G := hBor
+  let : μ.IsHaarMeasure := hHaar
+  let : μ.Regular := hReg
+  let d : G ≃ₜ* G :=
+    { toFun := fun x ↦ Multiplicative.ofAdd ((↑u⁻¹ : A) * x.toAdd)
+      invFun := fun x ↦ Multiplicative.ofAdd ((u : A) * x.toAdd)
+      left_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
+      right_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
+      map_mul' := fun x y ↦ Multiplicative.ext (mul_add _ _ _)
+      continuous_toFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd)
+      continuous_invFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd) }
+  let ν := μ.map d
+  let : ν.IsHaarMeasure := d.isHaarMeasure_map μ
+  let : ν.Regular := MeasureTheory.Measure.Regular.map d.toHomeomorph
+  refine ⟨ν.haarScalarFactor μ, fun f y ↦ ?_⟩
+  let k : G → ℂ := fun x ↦
+    f x * star ((sAdeleStandardCharacter F T (x.toAdd * ((u : A) * y)) : Circle) : ℂ)
+  have h1 : (∫ x : G, k (d.toHomeomorph.toMeasurableEquiv x) ∂μ) =
+      ((ν.haarScalarFactor μ : ℝ) : ℂ) * ∫ x : G, k x ∂μ := by
+    rw [← MeasureTheory.integral_map_equiv d.toHomeomorph.toMeasurableEquiv k]
+    change (∫ x : G, k x ∂ν) = _
+    calc
+      _ = ∫ x : G, k x ∂(ν.haarScalarFactor μ • μ) :=
+        congrArg (fun m : MeasureTheory.Measure G ↦ ∫ x : G, k x ∂m)
+          (MeasureTheory.Measure.isMulLeftInvariant_eq_smul_of_regular ν μ)
+      _ = _ := by
+        rw [MeasureTheory.integral_smul_nnreal_measure]
+        rfl
+  refine Eq.trans ?_ h1
+  change (∫ x : A, f (Multiplicative.ofAdd ((↑u⁻¹ : A) * x)) *
+    star ((sAdeleStandardCharacter F T (x * y) : Circle) : ℂ) ∂(sAdditiveTamagawaMeasure F T)) =
+    ∫ x : A, f (Multiplicative.ofAdd ((↑u⁻¹ : A) * x)) *
+      star ((sAdeleStandardCharacter F T (((↑u⁻¹ : A) * x) * ((u : A) * y)) : Circle) : ℂ)
+      ∂(sAdditiveTamagawaMeasure F T)
+  refine MeasureTheory.integral_congr_ae (Filter.Eventually.of_forall fun x ↦ ?_)
+  change _ * star ((sAdeleStandardCharacter F T (x * y) : Circle) : ℂ) =
+    _ * star ((sAdeleStandardCharacter F T (((↑u⁻¹ : A) * x) * ((u : A) * y)) : Circle) : ℂ)
+  rw [mul_mul_mul_comm, Units.inv_mul, one_mul]
+
+/-- A level built from a Fourier region that is stable under shrinking by ideles of absolute
+value at least one at the infinite places and one at the finite places is preserved by the
+classes of norm at least one. The norm-one part of a class acts by a scalar, and the remaining
+part is represented by a positive real at one infinite place. -/
+private theorem sLocalInvariantPW_translate_level (hST : S ⊆ T) (K : Set (SAdeleRing F S))
+    (hK : ∀ a : (SAdeleRing F S)ˣ, (∀ w : InfinitePlace F, 1 ≤ ‖a.val.1 w‖) →
+      (∀ v : S, ‖a.val.2 v‖ = 1) → ∀ y : SAdeleRing F S, a.val * y ∈ K → y ∈ K)
+    (D : Submodule ℂ (B(T))) (hD : D = ⊤ ∨ D = Z₀(T))
+    (ω : PontryaginDual J₁(T)) (g : J(T)) (hg : large(g))
+    (x : Θ(T, ω)) (hx : x ∈ level(hST, K, D, ω)) :
+    A(T, ω) g x ∈ level(hST, K, D, ω) := by
+  classical
+  let ρ := A(T, ω)
+  have hρ : ∀ (a : (SAdeleRing F T)ˣ) (f : B(T)),
+      ρ (QuotientGroup.mk a) (q(T, ω) f) = q(T, ω) (schwartzBruhatUnitTranslate a f) :=
+    (existsUnique_sLocalHomogeneousThetaAction (F := F) (S := T) ω).exists.choose_spec.2
+  refine map_mem_closure (ρ g).continuous hx ?_
+  rintro _ ⟨f, ⟨hf, hfD⟩, rfl⟩
+  obtain ⟨h, rfl, hband⟩ := (mem_sLocalPWTests hST K f).mp hf
+  obtain ⟨w⟩ := (inferInstance : Nonempty (InfinitePlace F))
+  let t : ℝ≥0ˣ := m(T) g
+  let x₀ := (infinitePlaceRealPower F w (w.mult : ℝ)⁻¹ t).val
+  have hx₀ : 1 ≤ ‖x₀‖ := by
+    have hiso : ‖InfinitePlace.Completion.extensionEmbedding w x₀‖ = ‖x₀‖ :=
+      (InfinitePlace.Completion.isometry_extensionEmbedding w).norm_map_of_map_zero
+        (map_zero _) x₀
+    rw [← hiso, infinitePlaceRealPower_apply, Complex.norm_real, Real.norm_eq_abs]
+    exact (Real.one_le_rpow hg (inv_nonneg.mpr (Nat.cast_nonneg _))).trans (le_abs_self _)
+  have hsS : ∃ uS : (integralAdelesOutside F S)ˣ,
+      integralIdeleInsertion F S uS = singlePlaceIdeleNormSection F w t := by
+    refine (mem_range_integralIdeleInsertion F S _).mpr fun v _ ↦ ⟨?_, ?_⟩
+    · exact (v.adicCompletionIntegers F).one_mem
+    · change ((singlePlaceIdeleNormSection F w t)⁻¹).val.2 v ∈ _
+      rw [← map_inv]
+      exact (v.adicCompletionIntegers F).one_mem
+  obtain ⟨uS, huS⟩ := hsS
+  let gS := Units.map (adeleProjection F S).toMonoidHom (integralIdeleInsertion F S uS)
+  let gT := Units.map (adeleProjection F T).toMonoidHom (integralIdeleInsertion F S uS)
+  have htr : Π(hST) (schwartzBruhatUnitTranslate gS h) =
+      schwartzBruhatUnitTranslate gT (Π(hST) h) := testTransition_translate_eq hST uS h
+  have hnorm : m(T) (QuotientGroup.mk gT) = t := by
+    obtain ⟨uT, huT⟩ := insert_mem_larger hST uS
+    have hspec := (sIdeleNorm_spec F T).1 uT
+    have hgT : gT = Units.map ((adeleProjection F T).comp
+        (integralAdelesOutside F T).subtype).toMonoidHom uT := by
+      change Units.map (adeleProjection F T).toMonoidHom (integralIdeleInsertion F S uS) = _
+      rw [← huT]
+      rfl
+    change sIdeleNorm F T gT = t
+    rw [hgT, ← hspec]
+    change ideleNorm F (integralIdeleInsertion F T uT) = t
+    rw [huT, huS]
+    exact singlePlaceIdeleNormSection_rightInverse F w t
+  let g₀ : J(T) := g * (QuotientGroup.mk gT)⁻¹
+  have hg₀ : g₀ ∈ (m(T)).ker := MonoidHom.mem_ker.mpr (by
+    change m(T) (g * (QuotientGroup.mk gT)⁻¹) = 1
+    rw [map_mul, map_inv, hnorm]
+    exact mul_inv_cancel t)
+  obtain ⟨v, hv⟩ := QuotientGroup.mk_surjective g₀
+  have hgv : g = QuotientGroup.mk v * QuotientGroup.mk gT := by
+    rw [hv]
+    exact (inv_mul_cancel_right g _).symm
+  let c : ℂ := (ω ⟨g₀, hg₀⟩ : ℂ)
+  have hscal := sLocalHomogeneousTheta_unitTranslate ω ⟨g₀, hg₀⟩ v hv
+    (schwartzBruhatUnitTranslate gT (Π(hST) h))
+  have hq : q(T, ω) (schwartzBruhatUnitTranslate v (schwartzBruhatUnitTranslate gT (Π(hST) h))) =
+      c • q(T, ω) (schwartzBruhatUnitTranslate gT (Π(hST) h)) := by
+    rw [← map_smul]
+    refine (Submodule.Quotient.eq _).mpr (LinearMap.mem_ker.mpr ?_)
+    rw [map_sub, map_smul, hscal, sub_self]
+  have key : ρ g (q(T, ω) (Π(hST) h)) =
+      c • q(T, ω) (Π(hST) (schwartzBruhatUnitTranslate gS h)) := by
+    rw [hgv, map_mul]
+    change ρ (QuotientGroup.mk v) (ρ (QuotientGroup.mk gT) (q(T, ω) (Π(hST) h))) = _
+    rw [hρ, hρ, hq, htr]
+  change ρ g (q(T, ω) (Π(hST) h)) ∈ ((sLocalPWTests hST K ⊓ D).map (q(T, ω)))
+  rw [key]
+  refine Submodule.smul_mem _ _ (Submodule.mem_map_of_mem
+    ⟨(mem_sLocalPWTests hST K _).mpr ⟨_, rfl, ?_⟩, ?_⟩)
+  · obtain ⟨b, hb⟩ := sLocalInvariantPW_translate_fourier gS
+    let e : Multiplicative (SAdeleRing F S) ≃ₜ Multiplicative (SAdeleRing F S) :=
+      { toFun := fun y ↦ Multiplicative.ofAdd ((gS : SAdeleRing F S) * y.toAdd)
+        invFun := fun y ↦ Multiplicative.ofAdd ((↑gS⁻¹ : SAdeleRing F S) * y.toAdd)
+        left_inv := fun y ↦ Multiplicative.ext (by simp [← mul_assoc])
+        right_inv := fun y ↦ Multiplicative.ext (by simp [← mul_assoc])
+        continuous_toFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd)
+        continuous_invFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd) }
+    refine sLocalInvariantPW_translate_support e ((b : ℝ) : ℂ) (sAdeleSchwartzFourier h).val
+      (sAdeleSchwartzFourier (schwartzBruhatUnitTranslate gS h)).val (fun y ↦ hb h y.toAdd)
+      (Multiplicative.toAdd ⁻¹' K) ?_ hband.1 hband.2
+    intro y hy
+    refine hK gS (fun w' ↦ ?_) (fun v' ↦ ?_) y.toAdd hy
+    · have h1 : (gS : SAdeleRing F S).1 w' = Pi.mulSingle w x₀ w' :=
+        congrArg (fun z : IdeleGroup (𝓞 F) F ↦ z.val.1 w') huS
+      rw [h1]
+      by_cases hw : w' = w
+      · subst hw
+        rw [Pi.mulSingle_eq_same]
+        exact hx₀
+      · rw [Pi.mulSingle_eq_of_ne hw, norm_one]
+    · have h2 : (gS : SAdeleRing F S).2 v' = 1 :=
+        congrArg (fun z : IdeleGroup (𝓞 F) F ↦ z.val.2 v'.val) huS
+      rw [h2, norm_one]
+  · rcases hD with rfl | rfl
+    · trivial
+    · rw [htr]
+      obtain ⟨h0, h1⟩ := (mem_sAdelePolarSubspace _).mp hfD
+      obtain ⟨b, hb⟩ := sLocalInvariantPW_translate_fourier gT
+      refine (mem_sAdelePolarSubspace _).mpr ⟨?_, ?_⟩
+      · refine (schwartzBruhatUnitTranslate_apply gT _ 0).trans ?_
+        rw [mul_zero]
+        exact h0
+      · rw [hb, mul_zero, h1, mul_zero]
+
 /-- Paper: Proposition 7.3.2.4(3), p. 356.
 Left translation by an idele class of norm at least one preserves the invariant levels,
 with or without the zero-moment constraint.
@@ -463,7 +846,21 @@ theorem sLocalInvariantPW_translate (hST : S ⊆ T) {Y : ℝ} (_hY : 0 < Y)
     (D : Submodule ℂ (B(T))) (_hD : D = ⊤ ∨ D = Z₀(T))
     (ω : PontryaginDual J₁(T)) (g : J(T)) (_hg : large(g))
     (x : Θ(T, ω)) (_hx : x ∈ sLocalInvariantPW hST Y D ω) :
-    A(T, ω) g x ∈ sLocalInvariantPW hST Y D ω := by sorry
+    A(T, ω) g x ∈ sLocalInvariantPW hST Y D ω := by
+  refine sLocalInvariantPW_translate_level hST (sLocalPWProductRegion S Y) ?_ D _hD ω g _hg x _hx
+  intro a ha1 ha2 y hy
+  refine le_trans ?_ (show (∏ w : InfinitePlace F, ‖(a.val * y).1 w‖ ^ w.mult) *
+    (∏ v : S, ‖(a.val * y).2 v‖) ≤ Y from hy)
+  refine mul_le_mul ?_ ?_ (Finset.prod_nonneg fun v _ ↦ norm_nonneg _)
+    (Finset.prod_nonneg fun w _ ↦ pow_nonneg (norm_nonneg _) _)
+  · refine Finset.prod_le_prod₀ (fun w _ ↦ pow_nonneg (norm_nonneg _) _) fun w _ ↦ ?_
+    refine pow_le_pow_left₀ (norm_nonneg _) ?_ _
+    change ‖y.1 w‖ ≤ ‖a.val.1 w * y.1 w‖
+    rw [norm_mul]
+    exact le_mul_of_one_le_left (norm_nonneg _) (ha1 w)
+  · refine Finset.prod_le_prod₀ (fun v _ ↦ norm_nonneg _) fun v _ ↦ ?_
+    change ‖y.2 v‖ ≤ ‖a.val.2 v * y.2 v‖
+    rw [norm_mul, ha2 v, one_mul]
 
 /-- Paper: Proposition 7.3.2.4(4), p. 356.
 The coordinate box bound implies the product bound with exponent the total number of places.
